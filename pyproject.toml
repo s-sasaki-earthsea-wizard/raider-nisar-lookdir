@@ -1,0 +1,19 @@
+[project]
+name = "raider-nisar-lookdir"
+version = "0.1.0"
+description = "Real-data evidence harness for RAiDER issue #676 (NISAR look direction)"
+requires-python = ">=3.10"
+
+# Deliberately minimal: this harness must run without installing RAiDER
+# itself (which needs isce3 via conda). It only reads NISAR GUNW metadata
+# over HTTP range requests and does ellipsoid/vector math with numpy.
+dependencies = [
+    "h5py>=3.10",
+    "fsspec>=2024.6.0",
+    "aiohttp>=3.9",
+    "requests>=2.31",
+    "numpy>=1.24",
+]
+
+[tool.uv]
+package = false

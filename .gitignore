@@ -1,0 +1,15 @@
+# Isolated env (recreate with `make setup`)
+.venv/
+
+# Optionally downloaded full products (GBs, machine-local).
+# The default `make verify` path streams metadata only and writes nothing here.
+data/
+*.h5
+*.h5.part
+
+# Python
+__pycache__/
+*.pyc
+
+# reports/ is tracked on purpose -- it holds the committed evidence that the
+# upstream issue comment links to by pinned SHA.
