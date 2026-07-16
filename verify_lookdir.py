@@ -19,6 +19,7 @@ The result is written to ``reports/lookdir_verification.md``.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -36,37 +37,7 @@ import requests
 # Granules under test
 # --------------------------------------------------------------------------
 
-SAMPLE_BASE = 'https://nisar.asf.earthdatacloud.nasa.gov/NISAR-SAMPLE-DATA/GUNW'
-BETA_BASE = 'https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GUNW_BETA_V1'
-
-# The JPL sample-suite product needs no Earthdata Login; the ASF beta stack
-# does (~/.netrc, machine urs.earthdata.nasa.gov).
-GRANULES: list[tuple[str, str, bool]] = [
-    (
-        'NISAR_L2_PR_GUNW_001_030_A_019_002_2000_SH_20081012T060911_20081012T060925'
-        '_20081127T061000_20081127T061014_D00404_N_F_J_001',
-        SAMPLE_BASE,
-        False,
-    ),
-] + [
-    (g, BETA_BASE, True)
-    for g in (
-        'NISAR_L2_PR_GUNW_003_159_A_022_004_2000_SH_20251028T051542_20251028T051612'
-        '_20251109T051542_20251109T051613_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_004_159_A_022_005_2000_SH_20251109T051542_20251109T051613'
-        '_20251121T051543_20251121T051613_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_005_159_A_022_006_2000_SH_20251121T051543_20251121T051613'
-        '_20251203T051544_20251203T051614_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_006_159_A_022_007_2000_SH_20251203T051544_20251203T051614'
-        '_20251215T051544_20251215T051614_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_007_159_A_022_008_2000_SH_20251215T051544_20251215T051614'
-        '_20251227T051545_20251227T051615_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_008_159_A_022_009_2000_SH_20251227T051545_20251227T051615'
-        '_20260108T051545_20260108T051615_X05010_N_F_J_001',
-        'NISAR_L2_PR_GUNW_009_159_A_022_010_2000_SH_20260108T051545_20260108T051615'
-        '_20260120T051546_20260120T051616_X05010_N_F_J_001',
-    )
-]
+GRANULES_JSON = Path(__file__).parent / 'granules.json'
 
 IDENT = 'science/LSAR/identification'
 ORBIT = 'science/LSAR/GUNW/metadata/orbit/reference'
@@ -207,10 +178,55 @@ def calc_buffer_ray_upstream(
 # --------------------------------------------------------------------------
 
 @dataclass
+class GranuleSpec:
+    """A granule to inspect, as declared in ``granules.json``."""
+
+    granule_id: str
+    base: str
+    auth: bool
+    expect: Optional[str]
+    note: str
+
+
+def load_granules(path: Path) -> list[GranuleSpec]:
+    """Load the granule list and resolve each entry's collection.
+
+    Args:
+        path: Path to ``granules.json``.
+
+    Returns:
+        The declared granules, in file order.
+
+    Raises:
+        KeyError: If an entry names a collection that is not declared.
+    """
+    doc = json.loads(path.read_text())
+    collections = doc['collections']
+    specs = []
+    for entry in doc['granules']:
+        name = entry['collection']
+        if name not in collections:
+            raise KeyError(f'{entry["id"]}: unknown collection {name!r}')
+        coll = collections[name]
+        specs.append(
+            GranuleSpec(
+                granule_id=entry['id'],
+                base=coll['base'],
+                auth=bool(coll.get('auth', False)),
+                expect=entry.get('expect'),
+                note=entry.get('note', ''),
+            )
+        )
+    return specs
+
+
+@dataclass
 class GranuleResult:
     """Outcome of inspecting a single granule."""
 
     granule_id: str
+    expect: Optional[str]
+    note: str
     look_meta: str
     look_geom: str
     signed: float
@@ -225,6 +241,11 @@ class GranuleResult:
     def agrees(self) -> bool:
         """Whether the metadata field matches the geometric derivation."""
         return self.look_meta.lower() == self.look_geom.lower()
+
+    @property
+    def as_expected(self) -> bool:
+        """Whether the metadata matches the declared expectation, if any."""
+        return self.expect is None or self.expect.lower() == self.look_meta.lower()
 
 
 def resolve_url(url: str, session: requests.Session) -> tuple[str, int]:
@@ -265,8 +286,7 @@ def scrub(exc: Exception) -> str:
 
 
 def inspect_granule(
-    granule_id: str,
-    base: str,
+    spec: GranuleSpec,
     session: requests.Session,
     local: Optional[Path],
     retries: int = 3,
@@ -274,8 +294,7 @@ def inspect_granule(
     """Read look direction and orbit geometry for one granule.
 
     Args:
-        granule_id: NISAR granule identifier.
-        base: Collection base URL.
+        spec: The granule to inspect.
         session: A requests session reused across granules.
         local: Directory of already-downloaded ``.h5`` files, or None to
             stream over HTTP range requests.
@@ -288,7 +307,7 @@ def inspect_granule(
     last: Exception = RuntimeError('no attempt made')
     for attempt in range(1, retries + 1):
         try:
-            return _inspect_granule_once(granule_id, base, session, local)
+            return _inspect_granule_once(spec, session, local)
         except Exception as exc:  # noqa: BLE001 - retry transient network faults
             last = exc
             if attempt < retries:
@@ -299,9 +318,10 @@ def inspect_granule(
 
 
 def _inspect_granule_once(
-    granule_id: str, base: str, session: requests.Session, local: Optional[Path]
+    spec: GranuleSpec, session: requests.Session, local: Optional[Path]
 ) -> GranuleResult:
     """Perform a single inspection attempt. See :func:`inspect_granule`."""
+    granule_id = spec.granule_id
     local_file = (local / f'{granule_id}.h5') if local else None
 
     if local_file and local_file.exists():
@@ -309,7 +329,7 @@ def _inspect_granule_once(
         opener = open(local_file, 'rb')
         fetched = -1
     else:
-        final, total = resolve_url(f'{base}/{granule_id}/{granule_id}.h5', session)
+        final, total = resolve_url(f'{spec.base}/{granule_id}/{granule_id}.h5', session)
         opener = fsspec.filesystem('http').open(final, 'rb', block_size=4 * 1024 * 1024)
         fetched = 0
 
@@ -329,6 +349,8 @@ def _inspect_granule_once(
 
     return GranuleResult(
         granule_id=granule_id,
+        expect=spec.expect,
+        note=spec.note,
         look_meta=look_meta,
         look_geom=look_geom,
         signed=signed,
@@ -377,20 +399,29 @@ def build_report(results: list[GranuleResult], elapsed: float) -> str:
         'Every NISAR GUNW product carries its own look direction, and that field is',
         'consistent with the state vectors and footprint embedded in the same file.',
         '',
+        'The single `Right` entry below is the JPL sample-suite granule, which is ALOS-1',
+        'PALSAR surrogate data, not a NISAR acquisition. It is kept as a **control**: it shows',
+        'the reader and the geometric check discriminate both values rather than always',
+        'reporting `Left`. No real NISAR acquisition is right-looking — see',
+        '[`archive_survey.md`](archive_survey.md) for the archive-wide census.',
+        '',
         '## Per-granule results',
         '',
         '`look (meta)` is read from the product. `look (geom)` is re-derived from',
         f'`{ORBIT}/{{position,velocity}}` and `{IDENT}/boundingPolygon` by solving the',
         'zero-Doppler condition and testing the sign of `(T-P) . (V x P)`.',
         '',
-        '| granule | track | pass | look (meta) | look (geom) | agree |',
-        '|---|---|---|---|---|---|',
+        '| granule | track | pass | look (meta) | look (geom) | agree | note |',
+        '|---|---|---|---|---|---|---|',
     ]
     for r in results:
         short = r.granule_id[:42] + '...'
         mark = 'yes' if r.agrees else '**NO**'
+        if not r.as_expected:
+            mark += f' / **unexpected (want {r.expect})**'
         lines.append(
-            f'| `{short}` | {r.track} | {r.pass_dir} | **{r.look_meta}** | {r.look_geom} | {mark} |'
+            f'| `{short}` | {r.track} | {r.pass_dir} | **{r.look_meta}** | {r.look_geom} '
+            f'| {mark} | {r.note} |'
         )
 
     lines += [
@@ -460,6 +491,12 @@ def main() -> int:
         help='directory of pre-downloaded .h5 granules to read instead of streaming',
     )
     parser.add_argument(
+        '--granules',
+        type=Path,
+        default=GRANULES_JSON,
+        help='JSON file declaring the granules under test',
+    )
+    parser.add_argument(
         '--out',
         type=Path,
         default=Path(__file__).parent / 'reports' / 'lookdir_verification.md',
@@ -467,21 +504,24 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    specs = load_granules(args.granules)
     session = requests.Session()
     results: list[GranuleResult] = []
     t0 = time.time()
 
-    for granule_id, base, needs_auth in GRANULES:
-        auth = ' (EDL)' if needs_auth else ''
-        print(f'--> {granule_id[:46]}...{auth}', flush=True)
+    for spec in specs:
+        auth = ' (EDL)' if spec.auth else ''
+        print(f'--> {spec.granule_id[:46]}...{auth}', flush=True)
         try:
-            r = inspect_granule(granule_id, base, session, args.local)
+            r = inspect_granule(spec, session, args.local)
         except Exception as exc:  # noqa: BLE001 - report and continue
             print(f'    FAILED: {scrub(exc)}', file=sys.stderr)
             continue
         mb = f'{r.fetched_bytes / 1e6:.1f} MB' if r.fetched_bytes >= 0 else 'local'
-        status = 'agree' if r.agrees else 'DISAGREE'
-        print(f'    meta={r.look_meta:5s} geom={r.look_geom:5s} {status}  [{mb}]', flush=True)
+        flags = 'agree' if r.agrees else 'DISAGREE'
+        if not r.as_expected:
+            flags += f' UNEXPECTED(want {r.expect})'
+        print(f'    meta={r.look_meta:5s} geom={r.look_geom:5s} {flags}  [{mb}]', flush=True)
         results.append(r)
 
     if not results:
@@ -493,7 +533,7 @@ def main() -> int:
     args.out.write_text(build_report(results, elapsed))
     print(f'\nWrote {args.out} ({len(results)} granules, {elapsed:.0f} s)')
 
-    return 0 if all(r.agrees for r in results) else 1
+    return 0 if all(r.agrees and r.as_expected for r in results) else 1
 
 
 if __name__ == '__main__':

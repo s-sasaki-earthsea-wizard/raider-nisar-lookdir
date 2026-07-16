@@ -1,0 +1,86 @@
+{
+  "_comment": [
+    "Granules under test for RAiDER issue #676. Add entries here rather than",
+    "editing verify_lookdir.py. 'expect' is optional; when present the harness",
+    "asserts the product's lookDirection matches it.",
+    "",
+    "The ALOS-1 surrogate is kept deliberately: it is the only Right-looking",
+    "product available, so it is the control that proves the reader and the",
+    "geometric check discriminate both values rather than always saying Left.",
+    "See reports/archive_survey.md -- no real NISAR acquisition is Right."
+  ],
+  "collections": {
+    "sample_suite": {
+      "base": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR-SAMPLE-DATA/GUNW",
+      "auth": false,
+      "note": "JPL NISAR Sample Data Suite (surrogate data, public)"
+    },
+    "gunw_beta": {
+      "base": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GUNW_BETA_V1",
+      "auth": true,
+      "note": "ASF NISAR L2 GUNW beta (real NISAR acquisitions, Earthdata Login)"
+    }
+  },
+  "granules": [
+    {
+      "id": "NISAR_L2_PR_GUNW_001_030_A_019_002_2000_SH_20081012T060911_20081012T060925_20081127T061000_20081127T061014_D00404_N_F_J_001",
+      "collection": "sample_suite",
+      "expect": "Right",
+      "note": "ALOS-1 PALSAR surrogate (2008), NISAR-format GUNW. Control case: the only Right-looking product."
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_003_159_A_022_004_2000_SH_20251028T051542_20251028T051612_20251109T051542_20251109T051613_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 1/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_004_159_A_022_005_2000_SH_20251109T051542_20251109T051613_20251121T051543_20251121T051613_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 2/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_005_159_A_022_006_2000_SH_20251121T051543_20251121T051613_20251203T051544_20251203T051614_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 3/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_006_159_A_022_007_2000_SH_20251203T051544_20251203T051614_20251215T051544_20251215T051614_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 4/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_007_159_A_022_008_2000_SH_20251215T051544_20251215T051614_20251227T051545_20251227T051615_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 5/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_008_159_A_022_009_2000_SH_20251227T051545_20251227T051615_20260108T051545_20260108T051615_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 6/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_009_159_A_022_010_2000_SH_20260108T051545_20260108T051615_20260120T051546_20260120T051616_X05010_N_F_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Central Spain, track 159 ascending, 12-day chain 7/7"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_003_172_A_002_004_2000_SH_20251029T024309_20251029T024330_20251110T024309_20251110T024331_X05010_N_P_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Track 172 ascending -- busiest track in the archive; a second, independent ascending track"
+    },
+    {
+      "id": "NISAR_L2_PR_GUNW_003_064_D_123_004_7700_SH_20251021T160426_20251021T160438_20251102T160426_20251102T160438_X05009_N_P_J_001",
+      "collection": "gunw_beta",
+      "expect": "Left",
+      "note": "Track 064 descending -- covers the descending case, which flips calc_buffer_ray's branch"
+    }
+  ]
+}

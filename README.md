@@ -18,19 +18,35 @@ back to its default `right`.
 
 In 2024 the maintainer's reply was that this was latent — *"Right now everything
 is right-looking, but very soon we will have a left-looking sensor (NISAR)"*.
-That is now testable. This harness shows, against products live in the archive:
+That is now testable, and the answer is stronger than "soon": against products
+live in the archive, this harness shows
 
 1. Every NISAR GUNW carries `science/LSAR/identification/lookDirection`
    (`'Left'` / `'Right'`), so RAiDER never has to guess.
-2. **Left-looking NISAR GUNWs exist today.** The ASF beta stack over central
-   Spain (track 159, ascending) is left-looking on all 7 granules.
+2. **NISAR is a left-looking mission.** All 221 (track, pass) groups in the
+   `NISAR_L2_GUNW_BETA_V1` collection — 10,217 granules — are left-looking, as
+   are sampled GSLC/GCOV/RSLC products. Not one right-looking acquisition
+   exists. So the hardcoded `right` is wrong for *every* NISAR product.
 3. The metadata is not taken on faith: the look side is re-derived from the
    state vectors and footprint embedded in the same product, and agrees on
-   8/8 granules.
+   10/10 granules inspected in depth.
 4. With the hardcoded `right`, RAiDER buffers the weather model on the wrong
-   side of the scene for those granules.
+   side of the scene for all of them.
 
-The generated report is [`reports/lookdir_verification.md`](reports/lookdir_verification.md).
+Two reports are generated:
+
+- [`reports/lookdir_verification.md`](reports/lookdir_verification.md) — depth:
+  10 granules, metadata vs. re-derived geometry, and the buffer consequence.
+- [`reports/archive_survey.md`](reports/archive_survey.md) — breadth: the
+  look-direction census of the whole beta archive.
+
+The one right-looking product in the verification set is the JPL sample-suite
+granule, which is ALOS-1 PALSAR surrogate data rather than a NISAR acquisition.
+It is kept deliberately, as the control that shows the reader and the geometric
+check discriminate both values instead of always reporting `Left`.
+
+Granules under test are declared in [`granules.json`](granules.json) — add
+entries there rather than editing the script.
 
 ## How it works
 
@@ -47,7 +63,8 @@ rather than imported, so this harness installs without isce3.
 
 ```bash
 make setup    # uv venv (.venv) + deps from pyproject.toml
-make verify   # stream metadata, re-derive geometry, regenerate the report
+make verify   # stream metadata, re-derive geometry, regenerate the report (~2 min)
+make survey   # census the whole beta archive's look direction (~6 min)
 ```
 
 `make` with no target lists the available targets.
@@ -70,7 +87,9 @@ make verify-local DIR=/path/to/granules
 ## Layout
 
 - `pyproject.toml` — deps for the isolated `.venv` (resolved with `uv`).
-- `Makefile` — `setup` / `verify` / `verify-local` / `clean`.
-- `verify_lookdir.py` — the harness; streams metadata, checks geometry, writes the report.
-- `reports/lookdir_verification.md` — committed evidence (tracked).
+- `Makefile` — `setup` / `verify` / `verify-local` / `survey` / `clean`.
+- `granules.json` — the granules under test, with per-entry `expect` and notes.
+- `verify_lookdir.py` — depth: streams metadata, checks geometry, writes the report.
+- `survey_archive.py` — breadth: CMR enumeration + archive-wide look-direction census.
+- `reports/` — committed evidence (tracked).
 - `.venv/`, `data/` — untracked.

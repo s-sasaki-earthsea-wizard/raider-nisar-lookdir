@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 PY := .venv/bin/python
 
-.PHONY: help setup verify verify-local clean
+.PHONY: help setup verify verify-local survey clean
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -16,6 +16,9 @@ verify:  ## Stream NISAR metadata, re-derive look side, write reports/lookdir_ve
 
 verify-local:  ## Same, but read pre-downloaded granules from data/ (DIR=... to override)
 	$(PY) verify_lookdir.py --local $(or $(DIR),data)
+
+survey:  ## Census lookDirection across the whole NISAR beta archive (~10 min, network-heavy)
+	$(PY) survey_archive.py
 
 clean:  ## Remove the venv and caches (keeps reports/)
 	rm -rf .venv __pycache__
